@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Search
+{% endblock %}
+
+{% block main %}
+  {%if method == 'GET'%}
+    <form action="/search" method="post">
+        <div class="form-group">
+            <input autocomplete="off" autofocus class="form-control" name="q" placeholder="ISBN, Author, Title" type="text"/>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  {% else %}
+  <div class="container">
+      <h1>Search Result:</h1>
+    <ul style="list-style-type:none">
+      {% for book in books %}
+        <li><a href="{{url_for('books', book_id=book.book_id)}}">{{book.title}}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% endif %}
+{% endblock %}

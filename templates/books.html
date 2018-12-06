@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    {{book.title}}
+{% endblock %}
+
+{% block main %}
+    <h1>{{book.title}}</h1>
+
+    <p><strong>Author:</strong> {{book.author}}</p>
+    <p><strong>Published:</strong> {{book.year}}</p>
+    <p><strong>ISBN:</strong> {{book.isbn}}</p>
+
+    <form action="{{url_for('books', book_id=book.book_id)}}" method="post">
+        <div class="form-group">
+            <textarea autofocus class="form-control" placeholder="Type your view." name="review" rows="8" cols="80"></textarea>
+        </div>
+        <button class="btn btn-primary" type="submit">Submit</button>
+    </form>
+
+    {% for review in reviews %}
+        <strong>{{review.user_id}}</strong>
+        <p>{{review.review}}</p>
+    {% endfor %}
+{% endblock %}
