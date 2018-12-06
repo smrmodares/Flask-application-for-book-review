@@ -1,8 +1,7 @@
 import os
 import requests
 
-res = requests.get("https://www.goodreads.com/book/review_counts.json", params={"key": "pNXqsEFLzAUImM9gNDJ0g", "isbns": "9781632168146"})
-print(res.json())
+
 
 from flask import Flask, flash, session, render_template, request, redirect, jsonify
 from flask_session import Session
@@ -152,26 +151,70 @@ def search():
 @app.route("/books/<int:book_id>", methods=["GET", "POST"])
 @login_required
 def books(book_id):
+    """Create a book page based on book_id"""
 
-    if not book_id:
-        return render_template("error.html", message="Invalid book!")
-
+    # if a review is submited deal with it
     if request.method == "POST":
+
         if not request.form.get("review"):
             return render_template("error.html", message="Review missing!")
 
-        db.execute("INSERT INTO reviews (review, user_id, book_id) VALUES (:review, :user_id, :book_id)",
-                    {"review": request.form.get("review"), "user_id": session["user_id"], "book_id": book_id})
-        db.commit()
+        elif not request.form.get("rating"):
+            return render_template("error.html", message="Rating missing!")
 
+        # Check if user already has a review
+        review_check = db.execute("SELECT * FROM reviews WHERE user_id = :user_id",
+                                  {"user_id": session["user_id"]}).fetchone()
+        # If user has no review
+        if not review_check:
+            # Inser new review
+            db.execute("INSERT INTO reviews (review, user_id, book_id, rating) VALUES (:review, :user_id, :book_id, :rating)",
+                        {"review": request.form.get("review"), "user_id": session["user_id"], "book_id": book_id, "rating": request.form.get("rating")})
+            db.commit()
+            flash("your review added.")
+        else:
+            # Update the old one
+            db.execute("UPDATE reviews SET (review, rating) = (:review, :rating) WHERE user_id = :user_id",
+                        {"review": request.form.get("review"), "rating": int(request.form.get("rating")), "user_id": session["user_id"]})
+            db.commit()
+            flash("your review updated.")
+
+    # Get book info
     book = db.execute("SELECT * FROM books WHERE book_id = :book_id", {"book_id": book_id} ).fetchone()
     if not book:
         return render_template("error.html", message="Book doesn't exist in our database!")
 
+    # Get goodreads info
+    res = requests.get("https://www.goodreads.com/book/review_counts.json", params={"key": "pNXqsEFLzAUImM9gNDJ0g", "isbns": book.isbn}).json()
 
-    reviews = db.execute("SELECT * FROM reviews WHERE book_id = :book_id", {"book_id": book_id} ).fetchall()
-    # for review in reviews:
-    #     review.user_id =
+    goodread = {'reviews_count': res['books'][0]['reviews_count'], 'average_rating': res['books'][0]['average_rating']}
 
-    flash("your review added.")
-    return render_template("books.html", book=book, reviews=reviews)
+    # Get users reviews
+    reviews = db.execute("SELECT * FROM reviews JOIN users ON users.user_id = reviews.user_id WHERE book_id = :book_id",
+                         {"book_id": book_id} ).fetchall()
+
+    return render_template("books.html", book=book, reviews=reviews, goodread=goodread)
+
+@app.route("/api/<string:isbn>")
+def api(isbn):
+    """API to send back a json for a book based on its ISBN"""
+
+    #Query  database for book info
+    book = db.execute("SELECT * FROM books WHERE isbn = :isbn", {"isbn": isbn}).fetchone()
+
+    # Make a dictionary from book infos
+    result = {"title": book.title, "author": book.author, "year": book.year, "isbn": book.isbn}
+
+    # Query database for count of reviews on this book
+    review_count = db.execute("SELECT COUNT(*) FROM reviews WHERE book_id = :book_id", {"book_id": book.book_id}).fetchone()[0]
+
+    # Query database fro average rating for this book
+    average_score = db.execute("SELECT AVG(rating) FROM reviews WHERE book_id = :book_id", {"book_id": book.book_id}).fetchone()[0]
+
+    # Type error check
+    if average_score == None:
+        average_score = 0
+    result['average_score'] = int(average_score)
+    result['review_count'] = int(review_count)
+
+    return jsonify(result)
